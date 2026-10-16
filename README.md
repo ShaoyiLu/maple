@@ -71,7 +71,7 @@ This also changed my data-quality conclusion: normal depot connectivity cannot b
 - **Tools I used:** OpenAI Codex / ChatGPT.
 - **What AI did for me:** AI helped me explore the supplied files, identify cross-file inconsistencies, design the prioritization method, implement the dashboard, write automated tests and review the README.
 - **One thing AI got wrong or incomplete, and how I caught it:** The initial idea focused too heavily on vendor HIGH alerts. Cross-checking `dtc_reference.csv` exposed a MEDIUM-labelled P0524 event that the reference classifies as critical, so I changed the ranking to use DTC urgency and work-order timing.
-- **Link to / export of my AI session:** https://github.com/ShaoyiLu/maple
+- **Link to / export of my AI session:** https://chatgpt.com/s/cx_6ad2714db094819196b8b6c68c6f4962
 
 ## If I had two more days
 
