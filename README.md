@@ -2,7 +2,7 @@
 
 ## How to run it
 
-This build uses only the Python standard library.
+Requires Python 3.9 or newer. No third-party packages or installation are required.
 
 ```powershell
 python app.py
@@ -22,9 +22,9 @@ python -m unittest -v
 
 ## Tonight's top 3 for Maple Freight
 
-1. **Item:** Stop V-137 before dispatch. **Why it matters:** a new P0524 low-oil-pressure fault appeared after the vehicle was cleared for dispatch this morning. The DTC reference says to stop immediately even though the vendor labelled it MEDIUM. **Evidence from the data:** P0524 was recorded at 2:32 p.m. ET at 96 kPa. WO-5540 closed at 7:40 a.m. for a different issue, the P0217 coolant sensor. **Next action (who, by when):** Operations places V-137 on dispatch hold now; Maintenance verifies oil pressure mechanically before release.
-2. **Item:** Move V-151's service forward and hold the vehicle. **Why it matters:** the vehicle combines a recent P0300 misfire with the fleet's largest maintenance overrun. **Evidence from the data:** P0300 occurred Sep 20 at 3:09 p.m. ET; the latest maintenance alert is 2,350 km overdue; WO-5541 is only scheduled for Oct 5. **Next action (who, by when):** Hamilton Depot removes V-151 from tomorrow's dispatch and escalates inspection before release.
-3. **Item:** Confirm V-158 remains out of service. **Why it matters:** a P0300 misfire was detected less than one hour before the 6:00 p.m. review. **Evidence from the data:** the alert occurred at 5:09 p.m.; WO-5543 opened at 5:30 p.m. and books inspection for Sep 22 morning, but no explicit dispatch hold is recorded. **Next action (who, by when):** Operations marks V-158 unavailable for the 6:00 a.m. dispatch until Maintenance clears WO-5543.
+1. **Item:** Stop V-108 and inspect two critical faults. **Why it matters:** the Hamilton gateway backfill revealed both overheating and low oil pressure on the same vehicle; both occurred before the original review but were hidden by the outage. **Evidence from the data:** P0217 occurred at 12:05 p.m. ET at 107 °C and P0524 occurred at 3:41 p.m. ET at 88 kPa. Both were delivered at 6:47 p.m.; the only V-108 work order closed Sep 9 for unrelated P0171. **Next action (who, by when):** Hamilton Depot places V-108 on dispatch hold now; Maintenance checks the cooling and oil-pressure systems before tomorrow's 6:00 a.m. dispatch.
+2. **Item:** Stop V-137 before dispatch. **Why it matters:** a new P0524 low-oil-pressure fault appeared after the vehicle was cleared for dispatch this morning. The DTC reference says to stop immediately even though the vendor labelled it MEDIUM. **Evidence from the data:** P0524 was recorded at 2:32 p.m. ET at 96 kPa. WO-5540 closed at 7:40 a.m. for a different issue, the P0217 coolant sensor. **Next action (who, by when):** Operations places V-137 on dispatch hold now; Maintenance verifies oil pressure mechanically before tomorrow's 6:00 a.m. dispatch.
+3. **Item:** Move V-151's service forward and hold the vehicle. **Why it matters:** the vehicle combines a recent P0300 misfire with the fleet's largest maintenance overrun. **Evidence from the data:** P0300 occurred Sep 20 at 3:09 p.m. ET; the latest maintenance alert is 2,350 km overdue; WO-5541 is only scheduled for Oct 5. **Next action (who, by when):** Hamilton Depot removes V-151 from tomorrow's dispatch now and Maintenance inspects it before returning it to service.
 
 ## What I built, and for whom
 
@@ -32,14 +32,22 @@ I built a local web dashboard for the operations manager's evening review and mo
 
 ## Assumptions I made
 
-- The operating cutoff is Sep 21, 2026 at 6:00 p.m. Eastern, as stated in the brief.
-- Event time determines when an incident happened; received time is used only to diagnose reporting delay.
+- The updated operating cutoff is Sep 21, 2026 at 6:47 p.m. Eastern, when the Hamilton gateway backfill arrived.
+- Event time determines when an incident happened; received time identifies reporting delay. The 10 Hamilton backfill records are included even though their events happened earlier.
 - Rows with the same vehicle, driver, alert type, event time, value, unit, posted limit and DTC represent the same underlying event even if alert IDs differ. I collapse 134 extra rows for prioritization but leave the source files unchanged.
 - Device-unplugged and camera-offline events from 11:00 p.m. to midnight local time are expected update-window noise.
 - A negative `maintenance_due` value means the vehicle is not yet due and should not be escalated.
-- DTC reference urgency overrides vendor severity when they disagree. There are 35 such disagreements among 120 deduplicated engine-fault events.
+- DTC reference urgency overrides vendor severity when they disagree. There are 37 such disagreements after the backfill.
 - An open work order shows that work has started, but it does not prove that Operations has placed the vehicle on dispatch hold unless the note says so.
 - Driver alert counts should be normalized per 1,000 km. Firmware 4.2.1 records 20.6 safety alerts per 1,000 km versus 8.1 for 4.3.0, so comparisons across firmware versions are not equivalent.
+
+## What changed after the new information
+
+The Hamilton backfill changed my priorities. V-108 moved to the top of the action queue because the delayed alerts contain both P0217 engine overheating and P0524 low oil pressure. Both faults occurred before the original 6:00 p.m. review but were not delivered until the Hamilton gateway reconnected at 6:47 p.m.
+
+I updated the dashboard cutoff to 6:47 p.m., added the ten backfilled alerts, moved V-108 to first position, and moved V-158 out of the Top 3 because its misfire already has an open work order.
+
+This also changed my data-quality conclusion: normal depot connectivity cannot be assumed. Alert delivery delay can hide urgent events, so the dashboard distinguishes event time from received time and highlights delayed critical faults.
 
 ## What I deliberately did NOT do (and why)
 
@@ -56,12 +64,12 @@ I built a local web dashboard for the operations manager's evening review and mo
 - Cross-checked critical engine faults against `dtc_reference.csv` and against work-order open/close times.
 - Verified that V-137's P0524 occurred after WO-5540 closed and concerns a different system than the repaired P0217 sensor issue.
 - Verified that D-17 has the largest raw safety-event count but not the largest exposure-adjusted rate.
-- Added automated tests for the Top 3, deduplication, known noise, severity conflicts and normalized driver rates.
+- Added automated tests for the changed Top 3, backfill counts, deduplication, known noise, delayed delivery, critical-fault evidence, queue rules and normalized driver rates.
 
 ## AI use
 
-- **Tools I used:** OpenAI Codex for data exploration, implementation, test generation and review.
-- **What AI did for me:** It helped inspect the supplied files, identify cross-file inconsistencies, propose a prioritization approach, implement the zero-dependency dashboard and draft tests and documentation.
+- **Tools I used:** OpenAI Codex / ChatGPT.
+- **What AI did for me:** AI helped me explore the supplied files, identify cross-file inconsistencies, design the prioritization method, implement the dashboard, write automated tests and review the README.
 - **One thing AI got wrong or incomplete, and how I caught it:** The initial idea focused too heavily on vendor HIGH alerts. Cross-checking `dtc_reference.csv` exposed a MEDIUM-labelled P0524 event that the reference classifies as critical, so I changed the ranking to use DTC urgency and work-order timing.
 - **Link to / export of my AI session:** https://github.com/ShaoyiLu/maple
 

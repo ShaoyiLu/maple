@@ -2,7 +2,7 @@
 
 Runs with the Python standard library only. It reads the supplied CSV files,
 reconciles them, and serves a small decision dashboard for the 6:00 p.m.
-September 21, 2026 operating review.
+September 21, 2026 operating review, including the Hamilton gateway backfill.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from zoneinfo import ZoneInfo
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data"
 ET = ZoneInfo("America/Toronto")
-AS_OF = datetime(2026, 9, 21, 18, 0, tzinfo=ET)
+AS_OF = datetime(2026, 9, 21, 18, 47, tzinfo=ET)
 
 
 def read_csv(name: str) -> list[dict[str, str]]:
@@ -56,7 +56,10 @@ def event_signature(row: dict[str, object]) -> tuple[object, ...]:
 
 
 def build_model() -> dict[str, object]:
-    raw_alerts = read_csv("alerts.csv")
+    original_alerts = read_csv("alerts.csv")
+    backfill_path = DATA / "hamilton_backfill.csv"
+    backfill_alerts = read_csv("hamilton_backfill.csv") if backfill_path.exists() else []
+    raw_alerts = original_alerts + backfill_alerts
     vehicles = {row["vehicle_id"]: row for row in read_csv("vehicles.csv")}
     dtc = {row["dtc_code"]: row for row in read_csv("dtc_reference.csv")}
     work_orders = read_csv("work_orders.csv")
@@ -136,6 +139,24 @@ def build_model() -> dict[str, object]:
     actions: list[dict[str, object]] = []
 
     # Cross-source decisions that matter before the next dispatch.
+    v108_overheat = next(
+        row for row in by_vehicle["V-108"] if row["alert_id"] == "A-120811"
+    )
+    v108_oil = next(
+        row for row in by_vehicle["V-108"] if row["alert_id"] == "A-707191"
+    )
+    actions.append(action(
+        "V-108", 110, "Critical", "Maintenance",
+        "Stop V-108 and inspect two critical faults",
+        "The Hamilton backfill revealed both overheating and low oil pressure on the same vehicle. Both happened before the original review but were hidden by the gateway outage.",
+        [
+            f"P0217 overheating at {v108_overheat['event_et']:%b %d, %I:%M %p} ET; value 107 C.",
+            f"P0524 low oil pressure at {v108_oil['event_et']:%b %d, %I:%M %p} ET; value 88 kPa.",
+            "Both alerts arrived at 6:47 p.m. ET. The only V-108 work order closed Sep 9 for P0171, a different issue.",
+        ],
+        "Hamilton Depot: place V-108 on dispatch hold now. Maintenance: inspect cooling and oil-pressure systems before release.",
+    ))
+
     v137_fault = next(
         row for row in by_vehicle["V-137"]
         if row["alert_type"] == "engine_fault" and row["dtc_code"] == "P0524"
@@ -289,12 +310,14 @@ def build_model() -> dict[str, object]:
         "firmware": firmware_rates,
         "metrics": {
             "raw_alerts": len(raw_alerts), "unique_events": len(alerts),
+            "backfill_alerts": len(backfill_alerts),
             "duplicate_extras": duplicate_extras, "night_noise": len(night_noise),
             "future_maintenance": len(future_maintenance), "delayed_1h": len(delayed_1h),
             "delayed_24h": len(delayed_24h), "faults": len(fault_rows),
             "severity_mismatch": severity_mismatch,
         },
         "method": [
+            "Include the 10-alert Hamilton gateway backfill received at 6:47 p.m. Eastern.",
             "Use event time, converted from UTC to Eastern, for recency decisions.",
             "Collapse identical event signatures even when alert IDs differ.",
             "Ignore device-unplugged and camera-offline alerts from 11:00 p.m. to midnight local time.",
@@ -318,8 +341,9 @@ header{display:flex;justify-content:space-between;gap:24px;align-items:end;margi
 .panel{padding:18px;margin-bottom:18px;min-width:0}.controls{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}select,input{border:1px solid #b8c6d4;border-radius:8px;padding:9px 11px;background:white;color:var(--ink)}input{min-width:250px;max-width:100%}table{width:100%;border-collapse:collapse}th{text-align:left;font-size:12px;color:var(--muted);text-transform:uppercase;border-bottom:2px solid var(--line);padding:10px 8px}td{border-bottom:1px solid var(--line);padding:12px 8px;vertical-align:top;overflow-wrap:anywhere}.pill{display:inline-block;padding:3px 8px;border-radius:999px;font-size:12px;font-weight:700}.Critical{background:#fee4e2;color:var(--red)}.High{background:#ffead5;color:var(--amber)}.Medium{background:#eaf2f8;color:#175c8d}.score{font-weight:800;color:var(--navy)}.detail{font-size:12px;color:var(--muted);margin-top:4px}.grid2{display:grid;grid-template-columns:1.15fr .85fr;gap:18px}.grid2>*{min-width:0}.callout{background:#fff8e7;border-left:4px solid #f4b400;padding:13px;margin:12px 0}.method li{margin:6px 0}.footer{color:var(--muted);font-size:12px;margin:24px 0 10px}
 @media(max-width:1000px){.top3,.grid2{grid-template-columns:1fr}.why{min-height:0}}@media(max-width:700px){.shell{padding:16px}.summary{grid-template-columns:1fr 1fr}header{display:block}.stamp{text-align:left;margin-top:8px}.section-head{display:block}.section-head .hint{margin-top:5px}table{font-size:13px}}
 </style></head><body><main class="shell">
-<header><div><h1>Maple Freight: What Needs Me Today?</h1><div class="sub">A focused action queue for tonight and the 6:00 a.m. dispatch</div></div><div class="stamp">As of Sep 21, 2026 · 6:00 p.m. Eastern<br>Source: supplied synthetic telematics and shop data</div></header>
+<header><div><h1>Maple Freight: What Needs Me Today?</h1><div class="sub">A focused action queue for tonight and the 6:00 a.m. dispatch</div></div><div class="stamp">Updated Sep 21, 2026 · 6:47 p.m. Eastern<br>Includes Hamilton gateway backfill</div></header>
 <section class="summary" id="metrics"></section>
+<div class="callout"><b>New information changed the ranking.</b> Hamilton Depot's gateway delivered 10 delayed alerts at 6:47 p.m. The backfill revealed two critical engine faults on V-108, which is now the first action.</div>
 <div class="section-head"><h2>Tonight's top 3</h2><div class="hint">Ranked by consequence, recency, corroboration and current resolution status</div></div>
 <section class="top3" id="top3"></section>
 <div class="section-head"><h2>Action queue</h2><div class="hint">Capped at 10 items to match operational capacity</div></div>
